@@ -1,25 +1,102 @@
----
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
----
+# EDA on the Activity Data
+
+In this project we will analyze some properties of the data at hand to answer the questions posed.
+This assignment lies within the scope of the course on Reproducible research at Coursera. For further 
+information refer to [this link.](https://www.coursera.org/learn/reproducible-research)
 
 
-## Loading and preprocessing the data
+```{r setup, include=FALSE}
+options(warn=-1)
+knitr::opts_chunk$set(echo = TRUE)
+```
 
+First we load the data, have a look at the variables and dimension and correct the class of dates.
 
+```{r echo=TRUE}
+library(ggplot2)
+library(dplyr)
+activity <- read.csv('activity.csv')
+head(activity)
+dim(activity)
+activity$date <- as.Date(as.character(activity$date))
+```
 
-## What is mean total number of steps taken per day?
+### 1. Number of steps taken per day
 
+Ignoring the missing values as specified in the instructions, we group the data by steps per day
+and calculate the steps taken per day, stored in steps_by_day, and plot the corresponding histogram.
 
+```{r, echo=TRUE}
+clean_activity <- activity[!is.na(activity$steps),]
+steps_by_day <- summarise(group_by(clean_activity, date), steps = sum(steps))
+ggplot(steps_by_day, aes(x=date, y=steps)) + geom_histogram(stat="identity") + 
+  ylab("Number of steps") + xlab("Month - Day") + theme_bw()
+```
 
-## What is the average daily activity pattern?
+The mean and median of the time series of steps taken per day are respectively: 
+```{r, echo=TRUE}
+print(mean(steps_by_day$steps))
+print(median(steps_by_day$steps))
+```
 
+### 2. Average daily activity pattern
 
+Now grouping according to which time interval the steps taken belong to we get the following.
 
-## Imputing missing values
+```{r, echo=TRUE}
+steps_by_interval <- summarise(group_by(activity, interval), steps = mean(steps, na.rm = TRUE))
+ggplot(steps_by_interval, aes(x = interval, y = steps)) + geom_line() + xlab('Interval') + 
+  ylab('Average number of steps')
+```
 
+And the interval which on average contains the maximum number of steps is:
 
+```{r, echo=TRUE}
+steps_by_interval$interval[which.max(steps_by_interval$steps)]
+```
 
-## Are there differences in activity patterns between weekdays and weekends?
+### 3. Imputing missing values
+
+As we have seen NA's may cause problems and up until now they have been omitted.
+Since there are no missing values for date or interval, the total number of missing rows coincides
+with the total number of NA's in the steps column, which is:
+```{r, echo=TRUE}
+sum(is.na(activity$steps))
+```
+
+We will now impute the missing values in a new dataframe by day. That is, we will naively suppose that
+the steps taken are the same, equal to the mean, in all missing values of a given day. 
+
+```{r, echo=TRUE}
+new_activity <- activity
+for (i in 1:length(new_activity$steps)){
+  if(is.na(new_activity$steps[i])) new_activity$steps[i] <- steps_by_day$steps[which.max(steps_by_day$date == activity$date[i])]
+}
+sum(is.na(new_activity$steps))
+```
+
+As desired. Now conducting the same analysis as in (1) over the newly created dataset we devise that:
+```{r, echo=TRUE}
+steps_by_day <- summarise(group_by(new_activity, date), steps = sum(steps))
+ggplot(steps_by_day, aes(x=date, y=steps)) + geom_histogram(stat="identity") + 
+  ylab("Number of steps") + xlab("Month - Day") + theme_bw()
+print(mean(steps_by_day$steps))
+print(median(steps_by_day$steps))
+```
+
+Yielding a diferent landscape, probably noisier, than that depicted in (1).
+
+### 4. Are there differences in activity patterns between weekdays and weekends
+
+Lastly, we want to see if there are differences in activity if we partition the data according
+to the positioning of the day in the week. For this part we will work with the clean dataset of (2).
+
+```{r, echo=TRUE}
+list <- c('lun','mar','mié','jue','vie')
+clean_activity$factor <- lapply(clean_activity$date, function(x) weekdays(x, abbreviate= TRUE) %in% list )
+weekdays = summarise(group_by(clean_activity[clean_activity$factor == TRUE,], interval = interval), steps = sum(steps))
+weekends = summarise(group_by(clean_activity[clean_activity$factor == FALSE,], interval = interval), steps = sum(steps))
+par(mfrow = c(2,1))
+plot(weekdays$interval, weekdays$steps, type = 'l', xlab = 'Interval', ylab = 'Number of steps', main = 'WEEKDAYS')
+plot(weekends$interval, weekends$steps, type = 'l', xlab = 'Interval', ylab = 'Number of steps', main = 'WEEKENDS')
+```
